@@ -9,7 +9,7 @@ interface SearchProps {
   onDone: (done: boolean) => void;
 }
 
-export const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) => {
+const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState<string>("");
@@ -29,7 +29,7 @@ export const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) =>
   };
 
   const fetchSources = async () => {
-    const response = await fetch("/api/sources", {
+    const response = await fetch(process.env.API_ENDPOINT + "/api/sources", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -54,7 +54,7 @@ export const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) =>
       ${sources.map((source, idx) => `Source [${idx + 1}]:\n${source.text}`).join("\n\n")}
       `;
 
-      const response = await fetch("/api/answer", {
+      const response = await fetch(process.env.API_ENDPOINT + "/api/answer", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -212,3 +212,5 @@ export const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) =>
     </>
   );
 };
+
+export default Search;
