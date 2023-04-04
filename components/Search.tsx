@@ -1,7 +1,7 @@
-import { SearchQuery, Source } from "@/types";
+import { FC, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { IconArrowRight, IconBolt, IconSearch } from "@tabler/icons-react";
 import endent from "endent";
-import { FC, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { SearchQuery, Source } from "@/types";
 
 interface SearchProps {
   onSearch: (searchResult: SearchQuery) => void;
@@ -12,10 +12,10 @@ interface SearchProps {
 const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [query, setQuery] = useState<string>("");
-  const [apiKey, setApiKey] = useState<string>("");
-  const [showSettings, setShowSettings] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [query, setQuery] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleSearch = async () => {
     if (!query) {
@@ -24,12 +24,18 @@ const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) => {
     }
 
     setLoading(true);
-    const sources = await fetchSources();
-    await handleStream(sources);
+    try {
+      const sources = await fetchSources();
+      await handleStream(sources);
+    } catch (error) {
+      onAnswerUpdate("Error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const fetchSources = async () => {
-    const response = await fetch(process.env.API_ENDPOINT + "/api/sources", {
+  const fetchSources = async (): Promise<Source[]> => {
+    const response = await fetch(`${process.env.API_ENDPOINT}/api/sources`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -38,59 +44,49 @@ const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) => {
     });
 
     if (!response.ok) {
-      setLoading(false);
       throw new Error(response.statusText);
     }
 
     const { sources }: { sources: Source[] } = await response.json();
-
     return sources;
   };
 
   const handleStream = async (sources: Source[]) => {
-    try {
-      const prompt = endent`Provide a 2-3 sentence answer to the query based on the following sources. Be original, concise, accurate, and helpful. Cite sources as [1] or [2] or [3] after each sentence (not just the very end) to back up your answer (Ex: Correct: [1], Correct: [2][3], Incorrect: [1, 2]).
-      
-      ${sources.map((source, idx) => `Source [${idx + 1}]:\n${source.text}`).join("\n\n")}
-      `;
+    const prompt = endent`Provide a 2-3 sentence answer to the query based on the following sources. Be original, concise, accurate, and helpful. Cite sources as [1] or [2] or [3] after each sentence (not just the very end) to back up your answer (Ex: Correct: [1], Correct: [2][3], Incorrect: [1, 2]).
 
-      const response = await fetch(process.env.API_ENDPOINT + "/api/answer", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ prompt, apiKey })
-      });
+${sources.map((source, idx) => `Source [${idx + 1}]:\n${source.text}`).join("\n\n")}
+`;
 
-      if (!response.ok) {
-        setLoading(false);
-        throw new Error(response.statusText);
-      }
+    const response = await fetch(`${process.env.API_ENDPOINT}/api/answer`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ prompt, apiKey })
+    });
 
-      setLoading(false);
-      onSearch({ query, sourceLinks: sources.map((source) => source.url) });
-
-      const data = response.body;
-
-      if (!data) {
-        return;
-      }
-
-      const reader = data.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunkValue = decoder.decode(value);
-        onAnswerUpdate(chunkValue);
-      }
-
-      onDone(true);
-    } catch (err) {
-      onAnswerUpdate("Error");
+    if (!response.ok) {
+      throw new Error(response.statusText);
     }
+
+    onSearch({ query, sourceLinks: sources.map((source) => source.url) });
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let done = false;
+
+    while (!done) {
+      const { value, done: doneReading } = await reader.read();
+      done = doneReading;
+      const chunkValue = decoder.decode(value);
+      onAnswerUpdate(chunkValue);
+    }
+
+    onDone(true);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -106,14 +102,12 @@ const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) => {
     }
 
     localStorage.setItem("CLARITY_KEY", apiKey);
-
     setShowSettings(false);
     inputRef.current?.focus();
   };
 
   const handleClear = () => {
     localStorage.removeItem("CLARITY_KEY");
-
     setApiKey("");
   };
 
@@ -145,7 +139,7 @@ const Search: FC<SearchProps> = ({ onSearch, onAnswerUpdate, onDone }) => {
 
           {apiKey.length === 51 ? (
             <div className="relative w-full">
-              <IconSearch className="text=[#D4D4D8] absolute top-3 w-10 left-1 h-6 rounded-full opacity-50 sm:left-3 sm:top-4 sm:h-8" />
+              <IconSearch className="text-[#D4D4D8] absolute top-3 w-10 left-1 h-6 rounded-full opacity-50 sm:left-3 sm:top-4 sm:h-8" />
 
               <input
                 ref={inputRef}
