@@ -1,5 +1,5 @@
 # Clarity AI
- 
+
 Clarity is simple [perplexity.ai](https://www.perplexity.ai/) clone. Use the code for whatever you like! :)
 
 If you have any questions, feel free to reach out to me on [Twitter](https://twitter.com/mckaywrigley).
