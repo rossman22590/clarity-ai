@@ -17,6 +17,7 @@
     "@types/react": "18.0.28",
     "@types/react-dom": "18.0.11",
     "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.3.1",
     "endent": "^2.1.0",
     "eslint": "8.34.0",
     "eslint-config-next": "13.1.6",
