@@ -1,9 +1,16 @@
+import axios from 'axios';
 import { OpenAIModel, Source } from "@/types";
 import { Readability } from "@mozilla/readability";
-import * as cheerio from "cheerio";
 import { JSDOM } from "jsdom";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { cleanSourceText } from "../../utils/sources";
+
+// Define an interface for the SERP API result
+interface SERPResult {
+  link: string;
+  // Add other fields as per the SERP API response structure
+}
+
 
 type Data = {
   sources: Source[];
@@ -17,64 +24,53 @@ const searchHandler = async (req: NextApiRequest, res: NextApiResponse<Data>) =>
     };
 
     const sourceCount = 4;
+    const apiKey = process.env.SERP_API_KEY; // Replace with your actual SERP API key
 
-    // GET LINKS
-    const response = await fetch(`https://www.google.com/search?q=${query}`);
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    const linkTags = $("a");
+  // Use SERP API to fetch search results
+const serpResponse = await axios.get('https://serpapi.com/search.json', {
+  params: {
+    q: query,
+    api_key: apiKey,
+    num: sourceCount,
+    hl: 'en'
+  }
+});
 
-    let links: string[] = [];
+const serpLinks = serpResponse.data.organic_results.map((result: SERPResult) => result.link);
 
-    linkTags.each((i, link) => {
-      const href = $(link).attr("href");
-
-      if (href && href.startsWith("/url?q=")) {
-        const cleanedHref = href.replace("/url?q=", "").split("&")[0];
-
-        if (!links.includes(cleanedHref)) {
-          links.push(cleanedHref);
-        }
-      }
-    });
-
-    const filteredLinks = links.filter((link, idx) => {
-      const domain = new URL(link).hostname;
-
-      const excludeList = ["google", "facebook", "twitter", "instagram", "youtube", "tiktok"];
-      if (excludeList.some((site) => domain.includes(site))) return false;
-
-      return links.findIndex((link) => new URL(link).hostname === domain) === idx;
-    });
-
-    const finalLinks = filteredLinks.slice(0, sourceCount);
 
     // SCRAPE TEXT FROM LINKS
-    const sources = (await Promise.all(
-      finalLinks.map(async (link) => {
-        const response = await fetch(link);
-        const html = await response.text();
+    const sources = await Promise.all(serpLinks.map(async (link: string) => {
+
+      try {
+        const response = await axios.get(link);
+        const html = response.data;
         const dom = new JSDOM(html);
         const doc = dom.window.document;
         const parsed = new Readability(doc).parse();
 
         if (parsed) {
           let sourceText = cleanSourceText(parsed.textContent);
-
           return { url: link, text: sourceText };
         }
-      })
-    )) as Source[];
+      } catch (error) {
+        console.error(`Error fetching content from ${link}:`, error);
+        return null;
+      }
+    }));
 
-    const filteredSources = sources.filter((source) => source !== undefined);
+    const filteredSources = sources.filter(source => source !== null);
 
-    for (const source of filteredSources) {
-      source.text = source.text.slice(0, 1500);
-    }
+    // Limit the text length for each source
+    filteredSources.forEach(source => {
+      if (source) {
+        source.text = source.text.slice(0, 1500);
+      }
+    });
 
     res.status(200).json({ sources: filteredSources });
   } catch (err) {
-    console.log(err);
+    console.error('Error in searchHandler:', err);
     res.status(500).json({ sources: [] });
   }
 };
